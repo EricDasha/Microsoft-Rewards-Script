@@ -1,0 +1,26 @@
+services:
+    microsoft-rewards-script:
+        image: microsoft-rewards-script:gui
+        container_name: microsoft-rewards-script
+        ports:
+            - "39785:8080"
+        restart: unless-stopped
+        volumes:
+            - ./config:/usr/src/microsoft-rewards-script/dist/config
+            - ./sessions:/usr/src/microsoft-rewards-script/dist/browser/sessions
+            - ./logs:/var/log
+        environment:
+            TZ: "Asia/Shanghai"
+            NODE_ENV: "production"
+            CRON_SCHEDULE: "0 7 * * *"
+            RUN_ON_START: "false"
+            SKIP_RANDOM_SLEEP: "false"
+            WEB_PORT: "8080"
+        healthcheck:
+            test: ["CMD", "sh", "-c", "pgrep cron >/dev/null && node -e 'fetch(\"http://127.0.0.1:8080/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 30s
+        security_opt:
+            - no-new-privileges:true

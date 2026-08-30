@@ -43,8 +43,59 @@ async function main() {
     })
     try {
         await waitFor(`${base}/health`)
-        assert.deepEqual(await (await fetch(`${base}/api/state`)).json(), { running: false, accounts: [], log: '' })
+        // 页面标题与自动调度 UI 元素存在
+        const pageText = await (await fetch(`${base}/`)).text()
+        assert.ok(pageText.includes('自动调度'))
+        assert.ok(pageText.includes('scheduleForm'))
+        // schedule 默认不开启
+        const initialState = await (await fetch(`${base}/api/state`)).json()
+        assert.equal(initialState.schedule.enabled, false)
+        assert.deepEqual(initialState.schedule.nextRun, null)
+        assert.deepEqual(initialState.accounts, [])
+        assert.equal(initialState.log, '')
         assert.equal((await fetch(`${base}/api/stop`, { method: 'POST' })).status, 409)
+        // 保存 interval 调度
+        let saved = await (await fetch(`${base}/api/schedule`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: true, mode: 'interval', intervalValue: 30, intervalUnit: 'minutes' })
+        })).json()
+        assert.equal(saved.enabled, true)
+        assert.equal(saved.mode, 'interval')
+        assert.equal(saved.intervalValue, 30)
+        assert.equal(saved.intervalUnit, 'minutes')
+        assert.ok(saved.nextRun)
+        // 非法 interval 值回退默认
+        saved = await (await fetch(`${base}/api/schedule`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: true, mode: 'interval', intervalValue: 0, intervalUnit: 'days' })
+        })).json()
+        assert.equal(saved.intervalValue, 6)
+        assert.equal(saved.intervalUnit, 'days')
+        // 固定时间调度 + 时间非法校验
+        saved = await (await fetch(`${base}/api/schedule`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: true, mode: 'daily', time: '99:99' })
+        })).json()
+        assert.equal(saved.mode, 'daily')
+        assert.equal(saved.time, '07:00')
+        saved = await (await fetch(`${base}/api/schedule`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: true, mode: 'daily', time: '08:30' })
+        })).json()
+        assert.equal(saved.time, '08:30')
+        assert.ok(saved.nextRun)
+        // 关闭调度
+        saved = await (await fetch(`${base}/api/schedule`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: false, mode: 'daily', time: '07:00' })
+        })).json()
+        assert.equal(saved.enabled, false)
+        assert.equal(saved.nextRun, null)
         const microsoftPassword = 'MICROSOFT_PASSWORD_MUST_NOT_LEAK'
         assert.equal((await fetch(`${base}/api/accounts`, {
             method: 'POST',
